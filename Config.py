@@ -21,7 +21,7 @@ class Config:
     demo_buffer_size = 500 * 50
     replay_buffer_size = demo_buffer_size * 2
     iteration = 5
-    episode = 300  # 300 games per iteration
+    episode = 100  # 300 games per iteration
     trajectory_n = 10  # for n-step TD-loss (both demo data and generated data)
 
 

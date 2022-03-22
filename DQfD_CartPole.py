@@ -9,6 +9,7 @@ import numpy as np
 import pickle
 from Config import Config, DDQNConfig, DQfDConfig
 from DQfD_V3 import DQfD
+from DQN import DQN
 from DQfDDDQN import DQfDDDQN
 from collections import deque
 import itertools
@@ -24,6 +25,34 @@ def map_scores(dqfd_scores=None, ddqn_scores=None, xlabel=None, ylabel=None):
     if ylabel is not None:
         plt.ylabel(ylabel)
     plt.show()
+
+
+
+def run_DQN(index, env):
+    with tf.variable_scope('DQN_' + str(index)):
+        agent = DQN(env, DDQNConfig())
+    scores = []
+    for e in range(Config.episode):
+        done = False
+        score = 0  # sum of reward in one episode
+        state = env.reset()
+        while done is False:
+            action = agent.egreedy_action(state)  # e-greedy action for train
+            next_state, reward, done, _ = env.step(action)
+            score += reward
+            reward = reward if not done or score == 499 else -100
+            agent.perceive([state, action, reward, next_state, done, 0.0])  # 0. means it is not a demo data
+            agent.train_Q_network(update=False)
+            state = next_state
+        if done:
+            scores.append(score)
+            agent.sess.run(agent.update_target_net)
+            print("episode:", e, "  score:", score, "  demo_buffer:", len(agent.demo_buffer),
+                  "  memory length:", len(agent.replay_buffer), "  epsilon:", agent.epsilon)
+            # if np.mean(scores[-min(10, len(scores)):]) > 490:
+            #     break
+    return scores
+
 
 
 def run_DDQN(index, env):
@@ -164,7 +193,7 @@ if __name__ == '__main__':
     # env = wrappers.Monitor(env, '/tmp/CartPole-v0', force=True)
     # ------------------------ get demo scores by DDQN -----------------------------
     # get_demo_data(env)
-    # --------------------------  get DDQN scores ----------------------------------
+    # --------------------------  get DDQN v1 scores ----------------------------------
     # ddqn_sum_scores = np.zeros(Config.episode)
     # for i in range(Config.iteration):
     #     scores = run_DDQN(i, env)
@@ -172,9 +201,23 @@ if __name__ == '__main__':
     # ddqn_mean_scores = ddqn_sum_scores / Config.iteration
     # with open('./ddqn_mean_scores.p', 'wb') as f:
     #     pickle.dump(ddqn_mean_scores, f, protocol=2)
-    with open('./ddqn_mean_scores.p', 'rb') as f:
-        ddqn_mean_scores = pickle.load(f)
-    # ----------------------------- get DQfD scores --------------------------------
+    #with open('./ddqn_mean_scores.p', 'rb') as f:
+    #    ddqn_mean_scores = pickle.load(f)
+    
+    
+    # --------------------------  get vanilla DQN scores ----------------------------------
+    dqn_sum_scores = np.zeros(Config.episode)
+    for i in range(Config.iteration):
+        scores = run_DQN(i, env)
+        dqn_sum_scores = np.array([a + b for a, b in zip(scores, dqn_sum_scores)])
+    dqn_mean_scores = dqn_sum_scores / Config.iteration
+    with open('./dqn_mean_scores.p', 'wb') as f:
+        pickle.dump(dqn_mean_scores, f, protocol=2)
+    
+    #with open('./ddqn_mean_scores.p', 'rb') as f:
+    #    ddqn_mean_scores = pickle.load(f)
+    
+    # ----------------------------- get DQfD v3 scores --------------------------------
     dqfd_sum_scores = np.zeros(Config.episode)
     for i in range(Config.iteration):
         scores = run_DQfD(i, env)
@@ -183,7 +226,9 @@ if __name__ == '__main__':
     with open('./dqfd_mean_scores.p', 'wb') as f:
         pickle.dump(dqfd_mean_scores, f, protocol=2)
 
-    map_scores(dqfd_scores=dqfd_mean_scores, ddqn_scores=ddqn_mean_scores,
+    #map_scores(dqn_scores=dqn_mean_scores, dqfd_scores=dqfd_mean_scores, ddqn_scores=ddqn_mean_scores,
+    map_scores(dqn_scores=dqn_mean_scores, dqfd_scores=dqfd_mean_scores,
+
         xlabel='Red: dqfd         Blue: ddqn', ylabel='Scores')
     env.close()
     # gym.upload('/tmp/carpole_DDQN-1', api_key='sk_VcAt0Hh4RBiG2yRePmeaLA')
